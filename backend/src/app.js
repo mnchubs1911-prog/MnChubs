@@ -30,11 +30,11 @@ const app = express();
 app.use(helmet());
 
 // Logging
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// CORS — allow localhost + any Vercel subdomain + the deployed frontend URL
+// CORS — allow localhost + any *.vercel.app + configured frontend URL
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
@@ -45,13 +45,14 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, curl, etc.)
       if (!origin) return callback(null, true);
-      // Allow any vercel.app subdomain automatically
-      if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+      if (
+        origin.endsWith('.vercel.app') ||
+        allowedOrigins.includes(origin)
+      ) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS policy blocked: ${origin}`));
+      return callback(new Error(`CORS: ${origin} not allowed`));
     },
     credentials: true,
   })
@@ -65,22 +66,22 @@ app.use(cookieParser());
 // Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'development' ? 2000 : 300,
-  message: 'Too many requests from this IP, please try again after 15 minutes',
+  max: process.env.NODE_ENV === 'production' ? 300 : 2000,
+  message: { success: false, message: 'Too many requests. Try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api', limiter);
 
-// ── DB Connection Middleware (serverless-safe) ───────────────────────────────
-// Ensures the DB is connected before any request is processed.
-// Uses readyState caching so reconnection is skipped when already connected.
+// ── Serverless DB Middleware ─────────────────────────────────────────────────
+// Connects to MongoDB before every request (safe — uses readyState caching)
 app.use(async (req, res, next) => {
   try {
     await connectDB();
     next();
   } catch (err) {
-    next(new AppError('Database connection failed', 503));
+    console.error('DB connection error:', err.message);
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
   }
 });
 
@@ -102,14 +103,10 @@ app.use('/api/v1/stats', statsRoutes);
 
 // Health Check
 app.get('/api/v1/health', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Server is healthy',
-    timestamp: new Date(),
-  });
+  res.status(200).json({ status: 'success', message: 'Server is healthy', timestamp: new Date() });
 });
 
-// 404 Route
+// 404
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });

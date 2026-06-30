@@ -1,56 +1,37 @@
-/**
- * MongoDB Connection Configuration
- * Uses mongoose with automatic retry logic on connection failure.
- */
 import mongoose from 'mongoose';
 
-const RETRY_DELAY_MS = 5000;
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
 
 /**
- * Connect to MongoDB with exponential back-off retry.
- * @returns {Promise<void>}
+ * Connect to MongoDB.
+ * - Uses readyState caching so serverless re-invocations skip reconnection.
+ * - Throws on failure so the caller can return a 503.
  */
 const connectDB = async () => {
-  if (mongoose.connection.readyState >= 1) {
+  // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+  if (mongoose.connection.readyState === 1) return;
+  if (mongoose.connection.readyState === 2) {
+    // Wait for connecting state to resolve
+    await new Promise((resolve) => mongoose.connection.once('connected', resolve));
     return;
   }
 
-  let retries = 0;
-
-  while (retries < MAX_RETRIES) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const conn = await mongoose.connect(process.env.MONGO_URI, {
-        // Mongoose 7+ no longer requires useNewUrlParser / useUnifiedTopology
+      await mongoose.connect(process.env.MONGO_URI, {
+        serverSelectionTimeoutMS: 5000,
       });
-      console.log(`✅ MongoDB connected: ${conn.connection.host}`);
+      console.log(`✅ MongoDB connected: ${mongoose.connection.host}`);
       return;
-    } catch (error) {
-      retries += 1;
-      console.error(
-        `❌ MongoDB connection attempt ${retries}/${MAX_RETRIES} failed: ${error.message}`
-      );
-
-      if (retries >= MAX_RETRIES) {
-        console.error('❌ Max MongoDB connection retries reached.');
-        throw error;
-      }
-
-      // Exponential back-off
-      const delay = RETRY_DELAY_MS * retries;
-      console.log(`⏳ Retrying in ${delay / 1000}s…`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+    } catch (err) {
+      console.error(`❌ MongoDB attempt ${attempt}/${MAX_RETRIES}: ${err.message}`);
+      if (attempt === MAX_RETRIES) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
   }
 };
 
-// Graceful shutdown helpers
-mongoose.connection.on('disconnected', () => {
-  console.log('⚠️  MongoDB disconnected');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error(`❌ MongoDB error: ${err.message}`);
-});
+mongoose.connection.on('disconnected', () => console.log('⚠️ MongoDB disconnected'));
+mongoose.connection.on('error', (err) => console.error(`❌ MongoDB error: ${err.message}`));
 
 export default connectDB;

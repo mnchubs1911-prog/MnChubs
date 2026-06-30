@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import jwt from 'jsonwebtoken';
 import { generateToken, generateRandomToken } from '../utils/helpers.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js';
 import { AppError } from '../middlewares/errorHandler.js';
