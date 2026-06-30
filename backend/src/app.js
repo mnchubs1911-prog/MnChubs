@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 
 import { errorHandler, AppError } from './middlewares/errorHandler.js';
+import connectDB from './config/db.js';
 
 // Route Imports
 import authRoutes from './routes/auth.routes.js';
@@ -22,10 +23,6 @@ import eventRoutes from './routes/event.routes.js';
 import mentorshipRoutes from './routes/mentorship.routes.js';
 import studyGroupRoutes from './routes/studygroup.routes.js';
 import statsRoutes from './routes/stats.routes.js';
-import connectDB from './config/db.js';
-
-// Connect to Database (for serverless environments)
-connectDB();
 
 const app = express();
 
@@ -37,10 +34,25 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// CORS configuration
+// CORS — allow localhost + any Vercel subdomain + the deployed frontend URL
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Allow any vercel.app subdomain automatically
+      if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS policy blocked: ${origin}`));
+    },
     credentials: true,
   })
 );
@@ -50,15 +62,27 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Rate Limiting — generous limit for development
+// Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 2000 : 200,
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'development' ? 2000 : 300,
   message: 'Too many requests from this IP, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api', limiter);
+
+// ── DB Connection Middleware (serverless-safe) ───────────────────────────────
+// Ensures the DB is connected before any request is processed.
+// Uses readyState caching so reconnection is skipped when already connected.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(new AppError('Database connection failed', 503));
+  }
+});
 
 // Mount API Routes
 app.use('/api/v1/auth', authRoutes);
