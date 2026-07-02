@@ -48,11 +48,10 @@ const Login = () => {
         setError(result.message);
         toast.error(result.message);
       }
-    } catch (err) {
-      const msg = err.message || 'Google sign-in failed';
-      setError(msg);
-      toast.error(msg);
-    } finally {
+    }  catch (err) {
+  console.error("Firebase Error:", err);
+  alert(`${err.code}\n${err.message}`);
+          }finally {
       setGoogleLoading(false);
     }
   };
