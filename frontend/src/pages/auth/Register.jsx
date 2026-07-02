@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { User, Mail, Lock, AlertCircle, ArrowRight, Phone, Chrome } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { isFirebaseConfigured, signInWithGooglePopup } from '../../config/firebase.js';
+import { isFirebaseConfigured, signInWithGooglePopup, signInWithGoogleRedirect, handleRedirectResult } from '../../config/firebase.js';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -54,21 +54,52 @@ const Register = () => {
     }
   };
 
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        const idToken = await handleRedirectResult();
+        if (idToken) {
+          const savedPhone = sessionStorage.getItem('mnchub_reg_phone') || '';
+          const result = await googleLogin(idToken, savedPhone);
+          sessionStorage.removeItem('mnchub_reg_phone');
+          if (result.success) {
+            toast.success('Signed in with Google!');
+            navigate('/dashboard');
+          } else {
+            setError(result.message);
+            toast.error(result.message);
+          }
+        }
+      } catch (err) {
+        const msg = err.message || 'Google sign-in failed';
+        setError(msg);
+        toast.error(msg);
+      }
+    };
+    checkRedirect();
+  }, []);
+
   const handleGoogleSignIn = async () => {
     setError('');
 
     if (!validatePhone()) return;
 
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     try {
-      const idToken = await signInWithGooglePopup();
-      const result = await googleLogin(idToken, phone.trim());
-
-      if (result.success) {
-        toast.success('Signed in with Google!');
-        navigate('/dashboard');
+      if (isMobile) {
+        sessionStorage.setItem('mnchub_reg_phone', phone.trim());
+        await signInWithGoogleRedirect();
       } else {
-        setError(result.message);
-        toast.error(result.message);
+        const idToken = await signInWithGooglePopup();
+        const result = await googleLogin(idToken, phone.trim());
+
+        if (result.success) {
+          toast.success('Signed in with Google!');
+          navigate('/dashboard');
+        } else {
+          setError(result.message);
+          toast.error(result.message);
+        }
       }
     } catch (error) {
       const message = error.message || 'Google sign-in failed';

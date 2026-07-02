@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { signInWithGooglePopup, isFirebaseConfigured } from '../../config/firebase.js';
+import { signInWithGooglePopup, signInWithGoogleRedirect, handleRedirectResult, isFirebaseConfigured } from '../../config/firebase.js';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -35,25 +35,58 @@ const Login = () => {
     }
   };
 
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        setGoogleLoading(true);
+        const idToken = await handleRedirectResult();
+        if (idToken) {
+          const result = await googleLogin(idToken);
+          if (result.success) {
+            toast.success('Signed in with Google!');
+            navigate(redirectPath, { replace: true });
+          } else {
+            setError(result.message);
+            toast.error(result.message);
+          }
+        }
+      } catch (err) {
+        const msg = err.message || 'Google sign-in failed';
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setGoogleLoading(false);
+      }
+    };
+    checkRedirect();
+  }, []);
+
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     try {
-      const idToken = await signInWithGooglePopup();
-      const result = await googleLogin(idToken);
-      if (result.success) {
-        toast.success('Signed in with Google!');
-        navigate(redirectPath, { replace: true });
+      if (isMobile) {
+        await signInWithGoogleRedirect();
       } else {
-        setError(result.message);
-        toast.error(result.message);
+        const idToken = await signInWithGooglePopup();
+        const result = await googleLogin(idToken);
+        if (result.success) {
+          toast.success('Signed in with Google!');
+          navigate(redirectPath, { replace: true });
+        } else {
+          setError(result.message);
+          toast.error(result.message);
+        }
       }
     } catch (err) {
       const msg = err.message || 'Google sign-in failed';
       setError(msg);
       toast.error(msg);
     } finally {
-      setGoogleLoading(false);
+      if (!isMobile) {
+        setGoogleLoading(false);
+      }
     }
   };
 
