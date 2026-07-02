@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { User, Mail, Lock, AlertCircle, ArrowRight, Phone, Chrome } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { isFirebaseConfigured, signInWithGooglePopup, signInWithGoogleRedirect, handleRedirectResult } from '../../config/firebase.js';
+import { isFirebaseConfigured, signInWithGoogleRedirect, handleRedirectResult } from '../../config/firebase.js';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -81,26 +81,12 @@ const Register = () => {
 
   const handleGoogleSignIn = async () => {
     setError('');
-
     if (!validatePhone()) return;
-
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     try {
-      if (isMobile) {
-        sessionStorage.setItem('mnchub_reg_phone', phone.trim());
-        await signInWithGoogleRedirect();
-      } else {
-        const idToken = await signInWithGooglePopup();
-        const result = await googleLogin(idToken, phone.trim());
-
-        if (result.success) {
-          toast.success('Signed in with Google!');
-          navigate('/dashboard');
-        } else {
-          setError(result.message);
-          toast.error(result.message);
-        }
-      }
+      // Always use redirect — works on all devices/browsers without popup issues
+      sessionStorage.setItem('mnchub_reg_phone', phone.trim());
+      await signInWithGoogleRedirect();
+      // Page will reload after redirect; result is handled in the useEffect above
     } catch (error) {
       const message = error.message || 'Google sign-in failed';
       setError(message);

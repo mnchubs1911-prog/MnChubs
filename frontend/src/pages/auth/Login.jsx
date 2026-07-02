@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { signInWithGooglePopup, signInWithGoogleRedirect, handleRedirectResult, isFirebaseConfigured } from '../../config/firebase.js';
+import { signInWithGoogleRedirect, handleRedirectResult, isFirebaseConfigured } from '../../config/firebase.js';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -64,29 +64,15 @@ const Login = () => {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     try {
-      if (isMobile) {
-        await signInWithGoogleRedirect();
-      } else {
-        const idToken = await signInWithGooglePopup();
-        const result = await googleLogin(idToken);
-        if (result.success) {
-          toast.success('Signed in with Google!');
-          navigate(redirectPath, { replace: true });
-        } else {
-          setError(result.message);
-          toast.error(result.message);
-        }
-      }
+      // Always use redirect — works on all devices/browsers without popup issues
+      await signInWithGoogleRedirect();
+      // Page will reload after redirect; result is handled in the useEffect above
     } catch (err) {
       const msg = err.message || 'Google sign-in failed';
       setError(msg);
       toast.error(msg);
-    } finally {
-      if (!isMobile) {
-        setGoogleLoading(false);
-      }
+      setGoogleLoading(false);
     }
   };
 
