@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { signInWithGoogleRedirect, handleRedirectResult, isFirebaseConfigured } from '../../config/firebase.js';
+import { signInWithGoogle, handleGoogleRedirect, isFirebaseConfigured } from '../../config/firebase.js';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -35,11 +35,12 @@ const Login = () => {
     }
   };
 
+  // On page load, check if we are returning from a Google redirect
   useEffect(() => {
-    const checkRedirect = async () => {
+    const completeRedirect = async () => {
       try {
         setGoogleLoading(true);
-        const idToken = await handleRedirectResult();
+        const idToken = await handleGoogleRedirect();
         if (idToken) {
           const result = await googleLogin(idToken);
           if (result.success) {
@@ -51,23 +52,33 @@ const Login = () => {
           }
         }
       } catch (err) {
-        const msg = err.message || 'Google sign-in failed';
-        setError(msg);
-        toast.error(msg);
+        // Ignore — no redirect was pending
       } finally {
         setGoogleLoading(false);
       }
     };
-    checkRedirect();
+    completeRedirect();
   }, []);
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
     try {
-      // Always use redirect — works on all devices/browsers without popup issues
-      await signInWithGoogleRedirect();
-      // Page will reload after redirect; result is handled in the useEffect above
+      // Try popup (instant). If blocked, automatically falls back to redirect.
+      const idToken = await signInWithGoogle();
+      if (idToken) {
+        // Popup succeeded — complete login immediately
+        const result = await googleLogin(idToken);
+        if (result.success) {
+          toast.success('Signed in with Google!');
+          navigate(redirectPath, { replace: true });
+        } else {
+          setError(result.message);
+          toast.error(result.message);
+        }
+        setGoogleLoading(false);
+      }
+      // If idToken is null → redirect was triggered, page will reload
     } catch (err) {
       const msg = err.message || 'Google sign-in failed';
       setError(msg);

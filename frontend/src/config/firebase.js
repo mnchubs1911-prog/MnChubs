@@ -2,16 +2,13 @@ import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  indexedDBLocalPersistence,
-  setPersistence,
 } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  // Always use the real Firebase authDomain — this is the URI registered
-  // in Google Cloud Console so redirect_uri_mismatch never happens.
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
@@ -36,40 +33,41 @@ if (isFirebaseConfigured) {
   googleProvider.addScope('email');
   googleProvider.addScope('profile');
   googleProvider.setCustomParameters({ prompt: 'select_account' });
-
-  // Use IndexedDB persistence — works on Safari/mobile where
-  // localStorage is blocked by cross-origin iframe restrictions.
-  setPersistence(auth, indexedDBLocalPersistence).catch(() => {
-    // Silently fallback if IndexedDB is unavailable (private mode, etc.)
-  });
 }
 
 /**
- * Trigger Google sign-in via redirect.
- * Works on ALL devices/browsers without popup issues.
+ * Try popup first (instant UX). If popup is blocked, fall back to redirect.
+ * Returns the Firebase ID token on popup success, null if redirect was triggered.
  */
-export const signInWithGoogleRedirect = async () => {
-  if (!auth || !googleProvider) {
-    throw new Error('Google sign-in is not configured');
+export const signInWithGoogle = async () => {
+  if (!auth || !googleProvider) throw new Error('Google sign-in is not configured');
+
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return await result.user.getIdToken();
+  } catch (err) {
+    // Popup was blocked by browser — fall back to full-page redirect
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+      await signInWithRedirect(auth, googleProvider);
+      return null; // Page will reload; result caught in handleGoogleRedirect
+    }
+    throw err;
   }
-  await signInWithRedirect(auth, googleProvider);
 };
 
 /**
- * Call on page load to complete the redirect sign-in flow.
- * Returns the Firebase ID token, or null if no redirect was pending.
+ * Call this once on page load (in useEffect) to complete a pending redirect sign-in.
+ * Returns Firebase ID token, or null if no redirect was in progress.
  */
-export const handleRedirectResult = async () => {
+export const handleGoogleRedirect = async () => {
   if (!auth) return null;
   try {
     const result = await getRedirectResult(auth);
-    if (result?.user) {
-      return result.user.getIdToken();
-    }
+    if (result?.user) return await result.user.getIdToken();
     return null;
   } catch (err) {
-    // Ignore non-critical redirect errors (e.g. no pending redirect)
-    console.warn('getRedirectResult:', err.message);
+    // Swallow non-critical redirect errors (no pending redirect, etc.)
+    console.warn('Firebase redirect result:', err.code, err.message);
     return null;
   }
 };

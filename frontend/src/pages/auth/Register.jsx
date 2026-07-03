@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore.js';
 import { User, Mail, Lock, AlertCircle, ArrowRight, Phone, Chrome } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { isFirebaseConfigured, signInWithGoogleRedirect, handleRedirectResult } from '../../config/firebase.js';
+import { isFirebaseConfigured, signInWithGoogle, handleGoogleRedirect } from '../../config/firebase.js';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -57,7 +57,7 @@ const Register = () => {
   useEffect(() => {
     const checkRedirect = async () => {
       try {
-        const idToken = await handleRedirectResult();
+        const idToken = await handleGoogleRedirect();
         if (idToken) {
           const savedPhone = sessionStorage.getItem('mnchub_reg_phone') || '';
           const result = await googleLogin(idToken, savedPhone);
@@ -71,9 +71,7 @@ const Register = () => {
           }
         }
       } catch (err) {
-        const msg = err.message || 'Google sign-in failed';
-        setError(msg);
-        toast.error(msg);
+        // Ignore redirect check failures
       }
     };
     checkRedirect();
@@ -83,10 +81,21 @@ const Register = () => {
     setError('');
     if (!validatePhone()) return;
     try {
-      // Always use redirect — works on all devices/browsers without popup issues
+      // Try popup first. If blocked, falls back to redirect automatically
       sessionStorage.setItem('mnchub_reg_phone', phone.trim());
-      await signInWithGoogleRedirect();
-      // Page will reload after redirect; result is handled in the useEffect above
+      const idToken = await signInWithGoogle();
+      if (idToken) {
+        const result = await googleLogin(idToken, phone.trim());
+        sessionStorage.removeItem('mnchub_reg_phone');
+        if (result.success) {
+          toast.success('Signed in with Google!');
+          navigate('/dashboard');
+        } else {
+          setError(result.message);
+          toast.error(result.message);
+        }
+      }
+      // If idToken is null -> redirect was triggered, page will reload
     } catch (error) {
       const message = error.message || 'Google sign-in failed';
       setError(message);
