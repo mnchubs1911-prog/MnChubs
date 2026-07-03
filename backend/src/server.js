@@ -1,6 +1,7 @@
 // Environment variables are loaded by Node via --env-file=.env flag in package.json scripts
 // This ensures all env vars are available before any ES module code runs
 
+import 'dotenv/config';
 import http from 'http';
 import { Server } from 'socket.io';
 import app from './app.js';
