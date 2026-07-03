@@ -19,7 +19,12 @@ const server = http.createServer(app);
 // Attach Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      process.env.FRONTEND_URL || 'https://mnchubs.vercel.app',
+      process.env.CLIENT_URL,
+    ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true,
   },

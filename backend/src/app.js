@@ -26,17 +26,26 @@ import statsRoutes from './routes/stats.routes.js';
 
 const app = express();
 
-// Security Headers
-app.use(helmet());
+// Security Headers — disable COOP for Firebase auth popups
+app.use(helmet({
+  crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+}));
+
+// Explicit COOP header removal for auth flows
+app.use((req, res, next) => {
+  res.removeHeader('Cross-Origin-Opener-Policy');
+  next();
+});
 
 // Logging
 if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// CORS — allow localhost + any *.vercel.app + configured frontend URL
+// CORS — allow localhost + *.vercel.app + *.onrender.com + configured frontend URL
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://localhost:3001',
   'http://localhost:5173',
   process.env.CLIENT_URL,
   process.env.FRONTEND_URL,
@@ -48,6 +57,7 @@ app.use(
       if (!origin) return callback(null, true);
       if (
         origin.endsWith('.vercel.app') ||
+        origin.endsWith('.onrender.com') ||
         allowedOrigins.includes(origin)
       ) {
         return callback(null, true);
@@ -55,6 +65,8 @@ app.use(
       return callback(new Error(`CORS: ${origin} not allowed`));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 

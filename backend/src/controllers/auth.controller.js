@@ -14,6 +14,8 @@ const sendTokenResponse = (user, statusCode, res) => {
     expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'Lax' : 'Lax',
+    path: '/',
   };
 
   res.cookie('refreshToken', refreshToken, cookieOptions);
