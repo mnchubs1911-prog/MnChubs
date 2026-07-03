@@ -20,12 +20,19 @@ const server = http.createServer(app);
 // Attach Socket.io
 const io = new Server(server, {
   cors: {
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      process.env.FRONTEND_URL || 'https://mnchubs.vercel.app',
-      process.env.CLIENT_URL,
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        origin.endsWith('.vercel.app') ||
+        origin === 'http://localhost:3000' ||
+        origin === 'http://localhost:5173' ||
+        origin === process.env.FRONTEND_URL ||
+        origin === process.env.CLIENT_URL
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Socket.io CORS: ${origin} not allowed`));
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },

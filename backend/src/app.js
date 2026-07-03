@@ -42,7 +42,7 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// CORS — allow localhost + *.vercel.app + *.onrender.com + configured frontend URL
+// CORS — allow localhost + *.vercel.app + configured frontend URL
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
@@ -57,7 +57,6 @@ app.use(
       if (!origin) return callback(null, true);
       if (
         origin.endsWith('.vercel.app') ||
-        origin.endsWith('.onrender.com') ||
         allowedOrigins.includes(origin)
       ) {
         return callback(null, true);
