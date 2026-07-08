@@ -88,8 +88,18 @@ const ResourceDetail = () => {
 
   const handleDownload = async () => {
     try {
-      const response = await api.get(`/resources/${resource._id}/download`);
-      window.open(response.data.url, '_blank');
+      const response = await api.get(`/resources/${resource._id}/download`, {
+        params: { json: true },
+      });
+      const downloadUrl = response.data?.url;
+      if (!downloadUrl) {
+        throw new Error('Download URL not returned');
+      }
+      
+      // Use window.location.href to trigger the attachment download 
+      // directly in the same tab. This prevents popup blockers from stopping it.
+      window.location.href = downloadUrl;
+
       setResource(prev => ({
         ...prev,
         metrics: { ...prev.metrics, downloads: prev.metrics.downloads + 1 }

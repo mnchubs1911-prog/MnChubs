@@ -1,8 +1,13 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+const rawBaseURL = import.meta.env.VITE_API_URL || '/api/v1';
+const normalizedBaseURL = rawBaseURL.endsWith('/api/v1')
+  ? rawBaseURL
+  : rawBaseURL.replace(/\/+$|$/, '').replace(/\/api\/v1$/, '') + '/api/v1';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: normalizedBaseURL,
   headers: {
     'Content-Type': 'application/json',
   },

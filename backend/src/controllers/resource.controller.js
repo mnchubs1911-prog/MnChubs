@@ -1,3 +1,5 @@
+import path from 'path';
+import { Readable } from 'stream';
 import Resource from '../models/Resource.js';
 import User from '../models/User.js';
 import { AppError } from '../middlewares/errorHandler.js';
@@ -13,6 +15,8 @@ export const createResource = async (req, res, next) => {
     const { title, description, resourceType, subject, semester, branch, tags } = req.body;
 
     const parsedTags = tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : [];
+    const originalFileName = req.file.originalname || 'file';
+    const fileExtension = path.extname(originalFileName).toLowerCase().replace('.', '');
 
     const resource = await Resource.create({
       title,
@@ -26,6 +30,10 @@ export const createResource = async (req, res, next) => {
       filePublicId: req.file.filename,
       fileSize: req.file.size,
       fileType: req.file.mimetype,
+      mimeType: req.file.mimetype,
+      originalName: originalFileName,
+      fileName: originalFileName,
+      fileExtension,
       tags: parsedTags,
       isApproved: true, // Instantly visible in development mode
     });
@@ -288,10 +296,27 @@ export const downloadResource = async (req, res, next) => {
     resource.metrics.downloads += 1;
     await resource.save();
 
-    res.status(200).json({
-      success: true,
-      url: resource.fileUrl,
-    });
+    if (!resource.fileUrl) {
+      return next(new AppError('File not available', 404));
+    }
+
+    // Dynamic upgrades: ensure URL is HTTPS and triggers download attachment headers
+    let downloadUrl = resource.fileUrl;
+    if (downloadUrl.startsWith('http://res.cloudinary.com')) {
+      downloadUrl = downloadUrl.replace('http://', 'https://');
+    }
+    if (downloadUrl.includes('cloudinary.com') && !downloadUrl.includes('/upload/fl_attachment/')) {
+      downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+    }
+
+    if (req.query.json === 'true') {
+      return res.status(200).json({
+        success: true,
+        url: downloadUrl,
+      });
+    }
+
+    return res.redirect(downloadUrl);
   } catch (error) {
     next(error);
   }
