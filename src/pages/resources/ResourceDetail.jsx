@@ -110,32 +110,11 @@ const ResourceDetail = () => {
 
   const handleDownload = async () => {
     try {
-      // Determine the best available filename from the already-loaded resource data.
-      // No extra API call needed — originalName is populated when the page loads.
       const filename =
         resource.originalName ||
         resource.downloadName ||
         resource.fileName ||
         `${resource.title || 'download'}.${resource.fileExtension || 'pdf'}`;
-
-      // Ask the backend for the signed Cloudinary URL that includes
-      // fl_attachment:<filename> — this tells Cloudinary to serve the file
-      // with Content-Disposition: attachment; filename="Notes.pdf".
-      const response = await api.get(`/resources/${resource._id}/download`, {
-        params: { json: 'true' },
-      });
-
-      const downloadUrl = response.data?.url;
-      const serverFilename = response.data?.filename || filename;
-
-      if (!downloadUrl) throw new Error('No download URL returned by server');
-
-      // Navigate the current tab to the download URL.
-      // Because the URL carries fl_attachment (Cloudinary) or our backend sets
-      // Content-Disposition: attachment, the browser triggers a file download
-      // instead of navigating away. This works on ALL browsers including
-      // mobile Safari, Chrome Android, and desktop browsers.
-      window.location.href = downloadUrl;
 
       // Optimistically update the local download counter
       setResource((prev) => ({
@@ -146,7 +125,12 @@ const ResourceDetail = () => {
         },
       }));
 
-      toast.success(`Downloading ${serverFilename}`);
+      toast.success(`Downloading ${filename}`);
+
+      // Direct browser navigation to the backend streaming endpoint.
+      // The backend streams the file with a Content-Disposition attachment header,
+      // forcing a direct download in the background without opening a new tab.
+      window.location.href = `${api.defaults.baseURL}/resources/${resource._id}/download`;
     } catch (error) {
       toast.error('Failed to start download. Please try again.');
       console.error('Download error:', error);
