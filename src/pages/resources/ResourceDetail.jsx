@@ -110,37 +110,45 @@ const ResourceDetail = () => {
 
   const handleDownload = async () => {
     try {
+      // Determine the best available filename from the already-loaded resource data.
+      // No extra API call needed — originalName is populated when the page loads.
+      const filename =
+        resource.originalName ||
+        resource.downloadName ||
+        resource.fileName ||
+        `${resource.title || 'download'}.${resource.fileExtension || 'pdf'}`;
+
+      // Ask the backend for the signed Cloudinary URL that includes
+      // fl_attachment:<filename> — this tells Cloudinary to serve the file
+      // with Content-Disposition: attachment; filename="Notes.pdf".
       const response = await api.get(`/resources/${resource._id}/download`, {
-        responseType: 'blob',
+        params: { json: 'true' },
       });
 
-      const blob = response.data instanceof Blob
       const downloadUrl = response.data?.url;
-      const filename = response.data?.filename || resource.originalName || resource.fileName || 'download';
+      const serverFilename = response.data?.filename || filename;
 
-      if (!downloadUrl) throw new Error('Download URL not returned');
+      if (!downloadUrl) throw new Error('No download URL returned by server');
 
-      // Create a hidden <a> tag and click it — this is the most reliable
-      // cross-browser way to trigger a download with the correct filename.
-      // The Cloudinary URL includes fl_attachment:filename so even if the
-      // browser ignores the `download` attribute for cross-origin URLs, the
-      // Content-Disposition header from Cloudinary still forces the download.
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = filename;         // browser uses this if same-origin or allowed
-      a.rel = 'noopener noreferrer';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // Navigate the current tab to the download URL.
+      // Because the URL carries fl_attachment (Cloudinary) or our backend sets
+      // Content-Disposition: attachment, the browser triggers a file download
+      // instead of navigating away. This works on ALL browsers including
+      // mobile Safari, Chrome Android, and desktop browsers.
+      window.location.href = downloadUrl;
 
+      // Optimistically update the local download counter
       setResource((prev) => ({
         ...prev,
-        metrics: { ...prev.metrics, downloads: (prev.metrics?.downloads || 0) + 1 },
+        metrics: {
+          ...prev.metrics,
+          downloads: (prev.metrics?.downloads || 0) + 1,
+        },
       }));
-      toast.success(`Downloading ${filename}`);
+
+      toast.success(`Downloading ${serverFilename}`);
     } catch (error) {
-      toast.error('Failed to download file. Please try again.');
+      toast.error('Failed to start download. Please try again.');
       console.error('Download error:', error);
     }
   };
