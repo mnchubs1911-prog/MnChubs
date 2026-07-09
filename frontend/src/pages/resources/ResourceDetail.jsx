@@ -19,6 +19,28 @@ import {
 import Loader from '../../components/ui/Loader.jsx';
 import toast from 'react-hot-toast';
 
+const getDownloadFileName = (contentDisposition, fallbackName) => {
+  if (!contentDisposition) {
+    return fallbackName || 'download';
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  if (plainMatch) {
+    return plainMatch[1];
+  }
+
+  return fallbackName || 'download';
+};
+
 const ResourceDetail = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -89,24 +111,37 @@ const ResourceDetail = () => {
   const handleDownload = async () => {
     try {
       const response = await api.get(`/resources/${resource._id}/download`, {
-        params: { json: true },
+        responseType: 'blob',
       });
-      const downloadUrl = response.data?.url;
-      if (!downloadUrl) {
-        throw new Error('Download URL not returned');
-      }
-      
-      // Use window.location.href to trigger the attachment download 
-      // directly in the same tab. This prevents popup blockers from stopping it.
-      window.location.href = downloadUrl;
 
-      setResource(prev => ({
+      const blob = response.data instanceof Blob
+      const downloadUrl = response.data?.url;
+      const filename = response.data?.filename || resource.originalName || resource.fileName || 'download';
+
+      if (!downloadUrl) throw new Error('Download URL not returned');
+
+      // Create a hidden <a> tag and click it — this is the most reliable
+      // cross-browser way to trigger a download with the correct filename.
+      // The Cloudinary URL includes fl_attachment:filename so even if the
+      // browser ignores the `download` attribute for cross-origin URLs, the
+      // Content-Disposition header from Cloudinary still forces the download.
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;         // browser uses this if same-origin or allowed
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setResource((prev) => ({
         ...prev,
-        metrics: { ...prev.metrics, downloads: prev.metrics.downloads + 1 }
+        metrics: { ...prev.metrics, downloads: (prev.metrics?.downloads || 0) + 1 },
       }));
-      toast.success('Download started');
+      toast.success(`Downloading ${filename}`);
     } catch (error) {
-      toast.error('Failed to download file');
+      toast.error('Failed to download file. Please try again.');
+      console.error('Download error:', error);
     }
   };
 
